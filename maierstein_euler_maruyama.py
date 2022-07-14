@@ -5,6 +5,8 @@ import matplotlib.pyplot as plt
 import math
 from maier_stein_vector_field import make_direction_field
 
+# author: William Clark
+
 # all column numpy arrays of size 2 will be (2,1) instead of (2,)
 
 # we have beta = 10:

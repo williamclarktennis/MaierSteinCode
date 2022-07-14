@@ -1,6 +1,8 @@
 import matplotlib.pyplot as plt
 import numpy as np
 
+# author: William Clark
+
 beta = 10.0
 
 def make_direction_field(ax):
