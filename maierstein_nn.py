@@ -22,7 +22,7 @@ in_size = 2
 out_size = 1
 
 # loss parameter: 
-alpha = 5.0
+alpha = 100.0
 
 # def shape_check(x: torch.tensor):
 #     """
@@ -39,10 +39,11 @@ alpha = 5.0
 #     return torch.unsqueeze(x,-1)
 
 class NeuralNetwork(nn.Module):
-    def __init__(self, hidden_size):
+    def __init__(self, hidden_size, hidden_size2):
         super().__init__()
         self.linear1 = nn.Linear(in_size,hidden_size)
-        self.linear2 = nn.Linear(hidden_size, out_size)
+        self.linear2 = nn.Linear(hidden_size,hidden_size2)
+        self.linear3 = nn.Linear(hidden_size2, out_size)
         """
         nn.Linear documentation: 
         (https://pytorch.org/docs/stable/generated/torch.nn.Linear.html)
@@ -64,14 +65,26 @@ class NeuralNetwork(nn.Module):
         # put input through first layer
         out = self.linear1(X)
 
-        # define activation func
+        # define tanh activation func
+        tanh = nn.Tanh()
+
+        # apply activation function
+        out = tanh(out)
+
+        # go thru second layer
+        out = self.linear2(out)
+
+        # apply tanh activation
+        out = tanh(out)
+
+        # go thru output layer
+        out = self.linear3(out)
+
+        # define sigmoid activation function
         sig = nn.Sigmoid()
         
         # apply activation func
         out = sig(out)
-
-        # go thru next layer
-        out = self.linear2(out)
 
         return out
 
@@ -179,7 +192,7 @@ def get_points_on_A_B():
 
 def get_training_pts_not_from_A_B_but_uniform():
     """
-    Make uniform grid of [-3,3]x[-2,2] with A and B removed
+    Make uniform grid of [-2,2]x[-0.5,0.5] with A and B removed
     """
     x = torch.linspace(-2,2,100)
     y = torch.linspace(-0.5,0.5,100)
@@ -237,7 +250,7 @@ class Training():
         self.train_dataloader = DataLoader(train_data, batch_size=64, shuffle=True)
     
     def train(self):
-        epochs = 100
+        epochs = 300
         for t in range(epochs):
             print(f"Epoch {t+1}\n-------------------------------")
             self.single_training_loop()
@@ -297,7 +310,7 @@ def main():
 
     if train:
         # initialize the model:
-        model = NeuralNetwork(hidden_size=10)
+        model = NeuralNetwork(hidden_size=20, hidden_size2=20)
         optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
         loss_fn = nn.MSELoss()
 
@@ -306,47 +319,59 @@ def main():
         my_training_object.train()
 
         # save the model:
-        filename = save_model(model,epochs=100)
+        filename = save_model(model,epochs=300)
 
     visualize = True
 
     if visualize:
 
         # load model weights
-        my_model = NeuralNetwork(hidden_size=10)
+        my_model = NeuralNetwork(hidden_size=20, hidden_size2=20)
         if not train:
             # change the working directory to the MaierSteinCode folder
             cwd = os.getcwd()
             if cwd == "/Users/williamclark/Documents/1mathematics/UMD_reu":
                 os.chdir("/Users/williamclark/Documents/1mathematics/UMD_reu/MaierSteinCode")
-            filepath = f"./model_weights/maier-stein-model-weights-dateime-2022-7-21-14-49-alpha-5.0-epochs-100"
+            filepath = f"./model_weights/maier-stein-model-weights-dateime-2022-7-22-16-18-alpha-100.0-epochs-300"
         else: 
             filepath = filename
         my_model.load_state_dict(torch.load(filepath))
 
         # load the points we want to visualize the model solution on:
-        x = torch.linspace(-2,2,100)
-        y = torch.linspace(-0.5,0.5,100)
-        xx, yy = torch.meshgrid(x,y)
-        xx_f = torch.flatten(xx)
-        yy_f = torch.flatten(yy)
-        input = torch.zeros((100*100,2))
-        input[:,0] = xx_f
-        input[:,1] = yy_f
+        # x = torch.linspace(-2,2,100)
+        # y = torch.linspace(-0.5,0.5,100)
+        # xx, yy = torch.meshgrid(x,y)
+        # xx_f = torch.flatten(xx)
+        # yy_f = torch.flatten(yy)
+        # input = torch.zeros((100*100,2))
+        # input[:,0] = xx_f
+        # input[:,1] = yy_f
         
-        z = my_model(input)
-        z = torch.reshape(z, (len(x), len(y)))
+        # z = my_model(input)
+        # z = torch.reshape(z, (len(x), len(y)))
 
-        max_z = torch.max(z).item()
-        min_z = torch.min(z).item()
+        #max_z = torch.max(z).item()
+        #min_z = torch.min(z).item()
 
         # matplotlib stuff: 
         fig, ax = plt.subplots()
-        levels = torch.linspace(min_z, max_z, 20)
-        cs = ax.contourf(xx.detach().numpy(), yy.detach().numpy(), z.detach().numpy(), levels = levels)
-        fig.colorbar(cs)
+        #levels = torch.linspace(min_z, max_z, 20)
+        #cs = ax.contourf(xx.detach().numpy(), yy.detach().numpy(), z.detach().numpy(), levels = levels)
+        #fig.colorbar(cs)
         ax.scatter(np.array([-1]), np.array([0]))
         ax.scatter(np.array([1]), np.array([0]))
+
+        pts = get_training_pts_not_from_A_B_but_uniform()
+        pts_a, pts_b = get_points_on_A_B()
+        pts = torch.cat((pts,pts_a,pts_b))
+        assert pts.shape[-1] == 2
+        z_new = my_model(pts)
+        ax.scatter(pts[:,0].detach().numpy(), pts[:,1].detach().numpy(), c= z_new.detach().numpy())
+
+        bA, bB = get_points_on_A_B()
+        ax.scatter(bA[:,0].detach().numpy(), bA[:,1].detach().numpy(), s=0.5)
+        ax.scatter(bB[:,0].detach().numpy(), bB[:,1].detach().numpy(), s=0.5)
+
         ax.set_title("Neural Network Approximation to Committor Function")
 
         plt.show()
