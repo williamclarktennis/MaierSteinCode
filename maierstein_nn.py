@@ -22,7 +22,7 @@ in_size = 2
 out_size = 1
 
 # loss parameter: 
-alpha = 100.0
+# alpha = 100.0
 
 # def shape_check(x: torch.tensor):
 #     """
@@ -39,54 +39,81 @@ alpha = 100.0
 #     return torch.unsqueeze(x,-1)
 
 class NeuralNetwork(nn.Module):
-    def __init__(self, hidden_size, hidden_size2):
+    # def __init__(self, hidden_size, hidden_size2):
+    #     super().__init__()
+    #     self.linear1 = nn.Linear(in_size,hidden_size)
+    #     self.linear2 = nn.Linear(hidden_size,hidden_size2)
+    #     self.linear3 = nn.Linear(hidden_size2, out_size)
+    #     """
+    #     nn.Linear documentation: 
+    #     (https://pytorch.org/docs/stable/generated/torch.nn.Linear.html)
+
+    #     Input: (*, H_{in}) where * means any number of 
+    #     dimensions including none and H_{in} =in_features.
+
+    #     Output: (*, H_{out}) where all but the last dimension 
+    #     are the same shape as the input and H_{out} =out_features.
+    #     """
+    
+    def __init__(self, layer_array):
         super().__init__()
-        self.linear1 = nn.Linear(in_size,hidden_size)
-        self.linear2 = nn.Linear(hidden_size,hidden_size2)
-        self.linear3 = nn.Linear(hidden_size2, out_size)
-        """
-        nn.Linear documentation: 
-        (https://pytorch.org/docs/stable/generated/torch.nn.Linear.html)
 
-        Input: (*, H_{in}) where * means any number of 
-        dimensions including none and H_{in} =in_features.
+        assert type(layer_array) == type([])
 
-        Output: (*, H_{out}) where all but the last dimension 
-        are the same shape as the input and H_{out} =out_features.
-        """
+        self.linears = nn.ModuleList([nn.Linear(layer_array[i],layer_array[i+1]) for i in range(len(layer_array)-1)])
 
     def forward(self, X):
-        """
-        X should have shape torch.Size([*,in_size])
-        """
-        # check that X shape is correct: 
-        assert X.shape[-1] == in_size
 
-        # put input through first layer
-        out = self.linear1(X)
+        assert X.shape[-1] == in_size
 
         # define tanh activation func
         tanh = nn.Tanh()
-
-        # apply activation function
-        out = tanh(out)
-
-        # go thru second layer
-        out = self.linear2(out)
-
-        # apply tanh activation
-        out = tanh(out)
-
-        # go thru output layer
-        out = self.linear3(out)
-
         # define sigmoid activation function
         sig = nn.Sigmoid()
-        
-        # apply activation func
-        out = sig(out)
 
-        return out
+        for i in range(len(self.linears)-1):
+            X = self.linears[i](X)
+            X = tanh(X)
+
+        X = self.linears[-1](X)
+        X = sig(X)
+
+        return X
+
+
+
+    # def forward(self, X):
+    #     """
+    #     X should have shape torch.Size([*,in_size])
+    #     """
+    #     # check that X shape is correct: 
+    #     assert X.shape[-1] == in_size
+
+    #     # put input through first layer
+    #     out = self.linear1(X)
+
+    #     # define tanh activation func
+    #     tanh = nn.Tanh()
+
+    #     # apply activation function
+    #     out = tanh(out)
+
+    #     # go thru second layer
+    #     out = self.linear2(out)
+
+    #     # apply tanh activation
+    #     out = tanh(out)
+
+    #     # go thru output layer
+    #     out = self.linear3(out)
+
+    #     # define sigmoid activation function
+    #     sig = nn.Sigmoid()
+        
+    #     # apply activation func
+    #     out = sig(out)
+
+    #     return out
 
 
 def get_Laplacian(q_NN: NeuralNetwork, X: torch.tensor) -> torch.tensor:
@@ -237,11 +264,12 @@ class Training():
     Training implements the PINN loss function model where
     the model to be trained will learn the boundary conditions. 
     """
-    def __init__(self,NN,optimizer,loss_fn, epochs):
+    def __init__(self,NN,optimizer,loss_fn, epochs, alpha):
         self.NN = NN
         self.optimizer = optimizer
         self.loss_fn = loss_fn
         self.epochs = epochs
+        self.alpha = alpha
 
         self.training_points_on_bdy_of_A, self.training_points_on_bdy_of_B = get_points_on_A_B()
         self.training_points_not_in_A_or_B = get_training_pts_not_from_A_B_but_uniform()
@@ -268,8 +296,8 @@ class Training():
             
             # compute prediction error
             pred_pts_not_in_A_or_B = L_q(self.NN,X)
-            pred_pts_on_bdy_A = math.sqrt(alpha) * self.NN(self.training_points_on_bdy_of_A)
-            pred_pts_on_bdy_B = math.sqrt(alpha) * self.NN(self.training_points_on_bdy_of_B) - math.sqrt(alpha)
+            pred_pts_on_bdy_A = math.sqrt(self.alpha) * self.NN(self.training_points_on_bdy_of_A)
+            pred_pts_on_bdy_B = math.sqrt(self.alpha) * self.NN(self.training_points_on_bdy_of_B) - math.sqrt(self.alpha)
             
             
             pred_vector = torch.cat((pred_pts_not_in_A_or_B,pred_pts_on_bdy_A,pred_pts_on_bdy_B))
@@ -294,7 +322,7 @@ class Training():
         
         return loss_plot
 
-def save_model(model, epochs=None, filename= None):
+def save_model(model, layer_array, alpha, epochs=None, filename= None):
     # save the model into your directory
     if filename != None:
         torch.save(model.state_dict(), filename)
@@ -302,10 +330,15 @@ def save_model(model, epochs=None, filename= None):
     else:
         cwd = os.getcwd()
         print(f"current working directory: {cwd}. Look for model weights here. ")
+        if cwd != "/Users/williamclark/Documents/1mathematics/UMD_reu/MaierSteinCode":
+            os.chdir("/Users/williamclark/Documents/1mathematics/UMD_reu/MaierSteinCode")
+        
         x = datetime.today()
         year, month, day, hour, minute = x.year, x.month, x.day, x.hour, x.minute
-        filename = f"maier-stein-model-weights-dateime-{year}-{month}-{day}-{hour}-{minute}-alpha-{alpha}-epochs-{epochs}"
-        torch.save(model.state_dict(), filename)
+
+        filename = f"maier-stein-model-weights-dateime-{year}-{month}-{day}-{hour}-{minute}-alpha-{alpha}-layer_array-{layer_array}-epochs-{epochs}"
+        filepath = "./model_weights/" + filename
+        torch.save(model.state_dict(), filepath)
         return filename
 
 
@@ -313,20 +346,26 @@ def main():
 
     # get_points_on_A_B()
 
-    train = True
+    train = False
+
+    layer_array = [in_size,20,20,out_size]
 
     if train:
         # initialize the model:
-        model = NeuralNetwork(hidden_size=20, hidden_size2=20)
+        # model = NeuralNetwork(hidden_size=20, hidden_size2=20)
+        model = NeuralNetwork(layer_array=layer_array)
+
+        # for_debugging = model.parameters()
+
         optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
         loss_fn = nn.MSELoss()
 
         # train the model:
-        my_training_object = Training(model, optimizer, loss_fn, epochs = 1000)
+        my_training_object = Training(model, optimizer, loss_fn, epochs = 100, alpha= 100.0)
         loss_plot = my_training_object.train()
 
         # save the model:
-        filename = save_model(model,epochs=my_training_object.epochs)
+        filename = save_model(model,layer_array,alpha = my_training_object.alpha, epochs=my_training_object.epochs)
 
         # visualize training: 
         fig, ax = plt.subplots()
@@ -338,13 +377,14 @@ def main():
     if visualize:
 
         # load model weights
-        my_model = NeuralNetwork(hidden_size=20, hidden_size2=20)
+        # my_model = NeuralNetwork(hidden_size=20, hidden_size2=20)
+        my_model = NeuralNetwork(layer_array= layer_array)
         if not train:
             # change the working directory to the MaierSteinCode folder
             cwd = os.getcwd()
-            if cwd == "/Users/williamclark/Documents/1mathematics/UMD_reu":
+            if cwd != "/Users/williamclark/Documents/1mathematics/UMD_reu/MaierSteinCode":
                 os.chdir("/Users/williamclark/Documents/1mathematics/UMD_reu/MaierSteinCode")
-            filepath = f"./model_weights/maier-stein-model-weights-dateime-2022-7-22-16-18-alpha-100.0-epochs-300"
+            filepath = f"./model_weights/maier-stein-model-weights-dateime-2022-7-25-11-52-alpha-100.0-layer_array-[2, 20, 20, 1]-epochs-100"
         else: 
             filepath = filename
         my_model.load_state_dict(torch.load(filepath))
