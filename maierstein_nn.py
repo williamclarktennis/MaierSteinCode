@@ -237,10 +237,11 @@ class Training():
     Training implements the PINN loss function model where
     the model to be trained will learn the boundary conditions. 
     """
-    def __init__(self,NN,optimizer,loss_fn):
+    def __init__(self,NN,optimizer,loss_fn, epochs):
         self.NN = NN
         self.optimizer = optimizer
         self.loss_fn = loss_fn
+        self.epochs = epochs
 
         self.training_points_on_bdy_of_A, self.training_points_on_bdy_of_B = get_points_on_A_B()
         self.training_points_not_in_A_or_B = get_training_pts_not_from_A_B_but_uniform()
@@ -250,13 +251,16 @@ class Training():
         self.train_dataloader = DataLoader(train_data, batch_size=64, shuffle=True)
     
     def train(self):
-        epochs = 300
+        epochs = self.epochs
+        loss_plot = torch.zeros(0)
         for t in range(epochs):
             print(f"Epoch {t+1}\n-------------------------------")
-            self.single_training_loop()
+            loss_plot = self.single_training_loop(loss_plot)
         print("Done!")
 
-    def single_training_loop(self):
+        return loss_plot
+
+    def single_training_loop(self, loss_plot):
         size = len(self.train_dataloader.dataset)
         self.NN.train()
         
@@ -285,7 +289,10 @@ class Training():
 
             if batch % 100 == 0:
                 loss, current = loss.item(), batch * len(X)
+                loss_plot = torch.cat((loss_plot, torch.tensor([loss])))
                 print(f"loss: {loss:>7f}  [{current:>5d}/{size:>5d}]")
+        
+        return loss_plot
 
 def save_model(model, epochs=None, filename= None):
     # save the model into your directory
@@ -306,7 +313,7 @@ def main():
 
     # get_points_on_A_B()
 
-    train = False
+    train = True
 
     if train:
         # initialize the model:
@@ -315,11 +322,16 @@ def main():
         loss_fn = nn.MSELoss()
 
         # train the model:
-        my_training_object = Training(model, optimizer, loss_fn)
-        my_training_object.train()
+        my_training_object = Training(model, optimizer, loss_fn, epochs = 1000)
+        loss_plot = my_training_object.train()
 
         # save the model:
-        filename = save_model(model,epochs=300)
+        filename = save_model(model,epochs=my_training_object.epochs)
+
+        # visualize training: 
+        fig, ax = plt.subplots()
+        ax.plot(loss_plot)
+        plt.show()
 
     visualize = True
 
@@ -338,28 +350,30 @@ def main():
         my_model.load_state_dict(torch.load(filepath))
 
         # load the points we want to visualize the model solution on:
-        # x = torch.linspace(-2,2,100)
-        # y = torch.linspace(-0.5,0.5,100)
-        # xx, yy = torch.meshgrid(x,y)
-        # xx_f = torch.flatten(xx)
-        # yy_f = torch.flatten(yy)
-        # input = torch.zeros((100*100,2))
-        # input[:,0] = xx_f
-        # input[:,1] = yy_f
+        x = torch.linspace(-2,2,100)
+        y = torch.linspace(-0.5,0.5,100)
+        xx, yy = torch.meshgrid(x,y)
+        xx_f = torch.flatten(xx)
+        yy_f = torch.flatten(yy)
+        input = torch.zeros((100*100,2))
+        input[:,0] = xx_f
+        input[:,1] = yy_f
         
-        # z = my_model(input)
-        # z = torch.reshape(z, (len(x), len(y)))
+        z = my_model(input)
+        z = torch.reshape(z, (len(x), len(y)))
 
-        #max_z = torch.max(z).item()
-        #min_z = torch.min(z).item()
+        max_z = torch.max(z).item()
+        min_z = torch.min(z).item()
 
         # matplotlib stuff: 
         fig, ax = plt.subplots()
-        #levels = torch.linspace(min_z, max_z, 20)
-        #cs = ax.contourf(xx.detach().numpy(), yy.detach().numpy(), z.detach().numpy(), levels = levels)
-        #fig.colorbar(cs)
+        levels = torch.linspace(min_z, max_z, 20)
+        cs = ax.contourf(xx.detach().numpy(), yy.detach().numpy(), z.detach().numpy(), levels = levels)
+        fig.colorbar(cs)
         ax.scatter(np.array([-1]), np.array([0]))
         ax.scatter(np.array([1]), np.array([0]))
+
+        fig, ax = plt.subplots()
 
         pts = get_training_pts_not_from_A_B_but_uniform()
         pts_a, pts_b = get_points_on_A_B()
