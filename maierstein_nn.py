@@ -13,6 +13,8 @@ from datetime import datetime
 
 import os
 
+from tqdm import tqdm
+
 """
 Highly Important: 
 Tensor inputs to the neural network must have shape (*,in_size). Output
@@ -39,21 +41,16 @@ out_size = 1
 #     return torch.unsqueeze(x,-1)
 
 class NeuralNetwork(nn.Module):
-    # def __init__(self, hidden_size, hidden_size2):
-    #     super().__init__()
-    #     self.linear1 = nn.Linear(in_size,hidden_size)
-    #     self.linear2 = nn.Linear(hidden_size,hidden_size2)
-    #     self.linear3 = nn.Linear(hidden_size2, out_size)
-    #     """
-    #     nn.Linear documentation: 
-    #     (https://pytorch.org/docs/stable/generated/torch.nn.Linear.html)
+    """
+    nn.Linear documentation: 
+    (https://pytorch.org/docs/stable/generated/torch.nn.Linear.html)
 
-    #     Input: (*, H_{in}) where * means any number of 
-    #     dimensions including none and H_{in} =in_features.
+    Input: (*, H_{in}) where * means any number of 
+    dimensions including none and H_{in} =in_features.
 
-    #     Output: (*, H_{out}) where all but the last dimension 
-    #     are the same shape as the input and H_{out} =out_features.
-    #     """
+    Output: (*, H_{out}) where all but the last dimension 
+    are the same shape as the input and H_{out} =out_features.
+    """
     
     def __init__(self, layer_array):
         super().__init__()
@@ -80,43 +77,7 @@ class NeuralNetwork(nn.Module):
 
         return X
 
-
-
-    # def forward(self, X):
-    #     """
-    #     X should have shape torch.Size([*,in_size])
-    #     """
-    #     # check that X shape is correct: 
-    #     assert X.shape[-1] == in_size
-
-    #     # put input through first layer
-    #     out = self.linear1(X)
-
-    #     # define tanh activation func
-    #     tanh = nn.Tanh()
-
-    #     # apply activation function
-    #     out = tanh(out)
-
-    #     # go thru second layer
-    #     out = self.linear2(out)
-
-    #     # apply tanh activation
-    #     out = tanh(out)
-
-    #     # go thru output layer
-    #     out = self.linear3(out)
-
-    #     # define sigmoid activation function
-    #     sig = nn.Sigmoid()
-        
-    #     # apply activation func
-    #     out = sig(out)
-
-    #     return out
-
-
-def get_Laplacian(q_NN: NeuralNetwork, X: torch.tensor) -> torch.tensor:
+def get_Laplacian_partialx_partialy(q_NN: NeuralNetwork, X: torch.tensor) -> torch.tensor:
     """
     
     """
@@ -154,10 +115,14 @@ def get_Laplacian(q_NN: NeuralNetwork, X: torch.tensor) -> torch.tensor:
     laplacian = jacobian_xx_xy[0][:,0] + jacobian_yx_yy[0][:,1]
 
     laplacian = laplacian[:,None]
+    partial_x = partial_x[:,None]
+    partial_y = partial_y[:,None]
 
     assert laplacian.shape[-1] == out_size
+    assert partial_x.shape[-1] == out_size
+    assert partial_y.shape[-1] == out_size
 
-    return laplacian
+    return laplacian, partial_x, partial_y
 
 def L_q(q_NN: NeuralNetwork, X:torch.tensor) -> torch.tensor:
     """
@@ -172,7 +137,9 @@ def L_q(q_NN: NeuralNetwork, X:torch.tensor) -> torch.tensor:
     assert x.shape[-1] == out_size
     assert y.shape[-1] == out_size
 
-    lq = (-4*x**2 - 10* y**2)* q_NN(X) + 0.1/2 * get_Laplacian(q_NN, X)
+    laplacian_q, partial_x, partial_y = get_Laplacian_partialx_partialy(q_NN,X)
+
+    lq = (x-x**3-10*x*y**2)* partial_x - (1+x**2)*y * partial_y + 0.1/2 * laplacian_q
 
     assert lq.shape[-1] == out_size
 
@@ -322,6 +289,76 @@ class Training():
         
         return loss_plot
 
+class TrainingPINNwTrajectoryTrainingData():
+    """
+    Training implements the PINN loss function model where
+    the model to be trained will learn the boundary conditions. 
+    """
+    def __init__(self,NN,optimizer,loss_fn, epochs, alpha):
+        self.NN = NN
+        self.optimizer = optimizer
+        self.loss_fn = loss_fn
+        self.epochs = epochs
+        self.alpha = alpha
+
+        self.training_points_on_bdy_of_A, self.training_points_on_bdy_of_B = get_points_on_A_B()
+        
+        x = torch.load("./training_data/delta_rarified-num_pts-20038-bumps-1000-tau-1000-h_param-0.2-w_param-0.025-deltat-0.001-datetime-2022-7-28-17-9.pt")
+        # ind = [(x[i,0]-1)**2+x[i,1]**2 > 0.3**2 and (x[i,0]+1)**2 + x[i,1]**2 > 0.3**2 for i in tqdm(range(len(x)))]
+        # self.training_points_not_in_A_or_B = torch.squeeze(x[ind])
+
+        self.training_points_not_in_A_or_B = x
+
+        # self.training_points_not_in_A_or_B = get_training_pts_not_from_A_B_but_uniform()
+
+        labels_for_training_pts_not_in_A_or_B = torch.zeros((len(self.training_points_not_in_A_or_B),out_size))
+        train_data = TensorDataset(self.training_points_not_in_A_or_B, labels_for_training_pts_not_in_A_or_B)
+        self.train_dataloader = DataLoader(train_data, batch_size=64, shuffle=True)
+    
+    def train(self):
+        epochs = self.epochs
+        loss_plot = torch.zeros(0)
+        for t in range(epochs):
+            print(f"Epoch {t+1}\n-------------------------------")
+            loss_plot = self.single_training_loop(loss_plot)
+        print("Done!")
+
+        return loss_plot
+
+    def single_training_loop(self, loss_plot):
+        size = len(self.train_dataloader.dataset)
+        self.NN.train()
+        
+        for batch, (X,y) in enumerate(self.train_dataloader):
+            
+            # compute prediction error
+            pred_pts_not_in_A_or_B = L_q(self.NN,X)
+            pred_pts_on_bdy_A = math.sqrt(self.alpha) * self.NN(self.training_points_on_bdy_of_A)
+            pred_pts_on_bdy_B = math.sqrt(self.alpha) * self.NN(self.training_points_on_bdy_of_B) - math.sqrt(self.alpha)
+            
+            
+            pred_vector = torch.cat((pred_pts_not_in_A_or_B,pred_pts_on_bdy_A,pred_pts_on_bdy_B))
+
+            """For debugging only. This is for training neural network entirely on boundary A and B"""
+            # pred_vector = torch.cat((pred_pts_on_bdy_A,pred_pts_on_bdy_B))
+            """Joke"""
+
+            assert pred_vector.shape[-1] == out_size
+            truth = torch.zeros_like(pred_vector)
+            loss = self.loss_fn(pred_vector,truth)
+
+            # backpropogation
+            self.optimizer.zero_grad()
+            loss.backward(retain_graph=True)
+            self.optimizer.step()
+
+            if batch % 100 == 0:
+                loss, current = loss.item(), batch * len(X)
+                loss_plot = torch.cat((loss_plot, torch.tensor([loss])))
+                print(f"loss: {loss:>7f}  [{current:>5d}/{size:>5d}]")
+        
+        return loss_plot
+
 def save_model(model, layer_array, alpha, epochs=None, filename= None):
     # save the model into your directory
     if filename != None:
@@ -329,7 +366,6 @@ def save_model(model, layer_array, alpha, epochs=None, filename= None):
         return filename
     else:
         cwd = os.getcwd()
-        print(f"current working directory: {cwd}. Look for model weights here. ")
         if cwd != "/Users/williamclark/Documents/1mathematics/UMD_reu/MaierSteinCode":
             os.chdir("/Users/williamclark/Documents/1mathematics/UMD_reu/MaierSteinCode")
         
@@ -346,9 +382,9 @@ def main():
 
     # get_points_on_A_B()
 
-    train = False
+    train = True
 
-    layer_array = [in_size,20,20,out_size]
+    layer_array = [in_size,20,out_size]
 
     if train:
         # initialize the model:
@@ -361,7 +397,7 @@ def main():
         loss_fn = nn.MSELoss()
 
         # train the model:
-        my_training_object = Training(model, optimizer, loss_fn, epochs = 100, alpha= 100.0)
+        my_training_object = Training(model, optimizer, loss_fn, epochs = 100, alpha= 10.0)
         loss_plot = my_training_object.train()
 
         # save the model:
@@ -370,7 +406,8 @@ def main():
         # visualize training: 
         fig, ax = plt.subplots()
         ax.plot(loss_plot)
-        plt.show()
+        plt.savefig("./training_loss_images/"+ filename+".png")
+        plt.clf()
 
     visualize = True
 
@@ -386,15 +423,11 @@ def main():
                 os.chdir("/Users/williamclark/Documents/1mathematics/UMD_reu/MaierSteinCode")
             filepath = f"./model_weights/maier-stein-model-weights-dateime-2022-7-25-11-52-alpha-100.0-layer_array-[2, 20, 20, 1]-epochs-100"
         else: 
-            filepath = filename
+            filepath = "./model_weights/" + filename
         my_model.load_state_dict(torch.load(filepath))
 
         # load the points we want to visualize the model solution on:
-        x = torch.linspace(-2,2,100)
-        y = torch.linspace(-0.5,0.5,100)
-        xx, yy = torch.meshgrid(x,y)
-        xx_f = torch.flatten(xx)
-        yy_f = torch.flatten(yy)
+        x, y, xx, yy, xx_f, yy_f = get_mesh_of_sample_space()
         input = torch.zeros((100*100,2))
         input[:,0] = xx_f
         input[:,1] = yy_f
@@ -412,6 +445,7 @@ def main():
         fig.colorbar(cs)
         ax.scatter(np.array([-1]), np.array([0]))
         ax.scatter(np.array([1]), np.array([0]))
+        # plt.savefig("./approx_images/"+ filename + ".png")
 
         fig, ax = plt.subplots()
 
@@ -420,16 +454,46 @@ def main():
         pts = torch.cat((pts,pts_a,pts_b))
         assert pts.shape[-1] == 2
         z_new = my_model(pts)
-        ax.scatter(pts[:,0].detach().numpy(), pts[:,1].detach().numpy(), c= z_new.detach().numpy())
+        cs1 = ax.scatter(pts[:,0].detach().numpy(), pts[:,1].detach().numpy(), c= z_new.detach().numpy())
+        fig.colorbar(cs1)
 
         bA, bB = get_points_on_A_B()
         ax.scatter(bA[:,0].detach().numpy(), bA[:,1].detach().numpy(), s=0.5)
         ax.scatter(bB[:,0].detach().numpy(), bB[:,1].detach().numpy(), s=0.5)
 
         ax.set_title("Neural Network Approximation to Committor Function")
+        plt.savefig("./approx_images/"+ filename + ".png")
 
         plt.show()
 
+def get_mesh_of_sample_space():
+    x = torch.linspace(-2,2,100)
+    y = torch.linspace(-0.5,0.5,100)
+    xx, yy = torch.meshgrid(x,y)
+    xx_f = torch.flatten(xx)
+    yy_f = torch.flatten(yy)
+    return x,y,xx,yy,xx_f,yy_f
+
 if __name__ =="__main__":
-    main()
+    layer_array = [2,20,1]
+    my_model = NeuralNetwork(layer_array= layer_array)
+    optimizer = torch.optim.Adam(my_model.parameters(), lr=1e-3)
+    loss_fn = nn.MSELoss()
+    my_training_object = TrainingPINNwTrajectoryTrainingData(my_model, optimizer, loss_fn, epochs = 30, alpha= 10.0)
+    my_training_object.train()
+    fig, ax = plt.subplots()
+
+    pts = my_training_object.training_points_not_in_A_or_B
+    ind = [(pts[i,0]-1)**2+pts[i,1]**2 >= 0.3**2 and (pts[i,0]+1)**2 + pts[i,1]**2 >= 0.3**2 for i in tqdm(range(len(pts)))]
+    pts = pts[ind]
+    pts_a, pts_b = get_points_on_A_B()
+    pts = torch.cat((pts,pts_a,pts_b))
+    assert pts.shape[-1] == 2
+    z_new = my_model(pts)
+    cs1 = ax.scatter(pts[:,0].detach().numpy(), pts[:,1].detach().numpy(), c= z_new.detach().numpy())
+    fig.colorbar(cs1)
+
+    plt.show()
+
+    #main()
 

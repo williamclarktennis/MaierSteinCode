@@ -1,4 +1,3 @@
-from tkinter import N
 from tqdm import tqdm
 import numpy as np
 import matplotlib.pyplot as plt
@@ -12,7 +11,7 @@ from maier_stein_vector_field import make_direction_field
 # we have beta = 10:
 beta = 10.0
 epsilon = 0.1
-delta_t = 1e-5
+delta_t = 1e-4
 
 def get_b_of_x_y(x_y):
     # x_y should be array of shape (2,1)
@@ -75,7 +74,7 @@ def main():
     init_1 = np.array([[-1],[0]])
     init_2 = np.array([[0],[0]])
     init_3 = np.array([[1],[0]])
-    n_iterations = int(5e5)
+    n_iterations = int(1e5)
 
     init_points = [init_1, init_2, init_3]
 
@@ -84,6 +83,12 @@ def main():
     fig2, ax2 = plt.subplots()
 
     my_axes = [ax,ax1,ax2]
+
+    for i in range(len(my_axes)):
+        circleA = plt.Circle((-1, 0), 0.3, color='pink')
+        circleB = plt.Circle((1, 0), 0.3, color='green')
+        my_axes[i].add_patch(circleA)
+        my_axes[i].add_patch(circleB)
 
     assert len(my_axes) == len(init_points)
 
@@ -97,6 +102,8 @@ def main():
     for i, i_point in enumerate(init_points):
         sample_path = get_sample_path(n_iterations, i_point)
         my_axes[i].scatter(sample_path[:,0], sample_path[:,1], s=1, c=color)
+        #plot regions A and B: 
+
     
     # plot equilibirum points: 
     for i in my_axes:
