@@ -1,7 +1,4 @@
 
-
-
-
 # sampling training data for the maier stein neural network. 
 # what is the dimensionality of this training data? 
 # answer: torch.Size([*,in_size]) where in_size = 2. 
@@ -39,6 +36,7 @@
 # tau is the number of iterations per deposit. 
 # How do we vectorize this implementation as much as possible? 
 
+from random import sample
 import torch
 import math
 import matplotlib.pyplot as plt
@@ -55,7 +53,7 @@ tau = 1000
 height_param = 0.2
 width_param = 0.025
 bumps = 1000
-delta = 0.005
+delta = 0.007
 
 x = datetime.today()
 year, month, day, hour, minute = x.year, x.month, x.day, x.hour, x.minute
