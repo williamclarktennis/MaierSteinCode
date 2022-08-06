@@ -1,0 +1,3 @@
+# MaierSteinCode
+Maier-Stein Model 
+
