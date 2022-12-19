@@ -4,6 +4,8 @@ import matplotlib.pyplot as plt
 from torch.utils.data import DataLoader
 from torch.utils.data import TensorDataset
 import nn_solver_PINN_approach as ms
+from distmesh import *
+from FEM_TPT import *
 
 from tqdm import tqdm
 
@@ -35,15 +37,31 @@ def visualize_chiAchiB():
     tanargB = 10* ((xx-1)**2 + yy**2 - (0.3+0.02)**2 )
     chiB = 1/2 - 1/2 * tanh(tanargB)
 
+    NA = 1000
+    NB = 1000
+    xa=-1
+    ya=0 
+    xb=1 
+    yb=0
+    ra = 0.3
+    rb = 0.3
+    ptsA = put_pts_on_circle(xa,ya,ra,NA) 
+    ptsB = put_pts_on_circle(xb,yb,rb,NB)  
+    
+
     fig, ax = plt.subplots()
     sc = ax.scatter(xx,yy,c=chiA)
     # ax.set_xlim(-1.5,-0.5)
     fig.colorbar(sc)
+    ax.plot(ptsA[:,0],ptsA[:,1],linewidth = 2,c = 'y')
+    ax.plot(ptsB[:,0],ptsB[:,1],linewidth = 2,c = 'r')
 
     fig, ax = plt.subplots()
     sc = ax.scatter(xx,yy,c=chiB)
     # ax.set_xlim(0.5,1.5)
     fig.colorbar(sc)
+    ax.plot(ptsA[:,0],ptsA[:,1],linewidth = 2,c = 'y')
+    ax.plot(ptsB[:,0],ptsB[:,1],linewidth = 2,c = 'r')
 
 def chiAchiB(X):
 
@@ -243,7 +261,7 @@ if __name__=="__main__":
     visualize_chiAchiB()
     plt.show()
 
-    train = True
+    train = False
     if train:
         # initialize the model:
         layer_array = [2,20,1]

@@ -3,6 +3,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 import math
 from maier_stein_vector_field import make_direction_field
+from distmesh import *
+from FEM_TPT import *
 
 # author: William Clark
 
@@ -84,11 +86,26 @@ def main():
 
     my_axes = [ax,ax1,ax2]
 
+
+    # then we put a circle around the regions A and B:
+    NA = 1000
+    NB = 1000
+    xa=-1
+    ya=0 
+    xb=1 
+    yb=0
+    ra = 0.3
+    rb = 0.3
+    ptsA = put_pts_on_circle(xa,ya,ra,NA) 
+    ptsB = put_pts_on_circle(xb,yb,rb,NB)  
     for i in range(len(my_axes)):
-        circleA = plt.Circle((-1, 0), 0.3, color='pink')
-        circleB = plt.Circle((1, 0), 0.3, color='green')
-        my_axes[i].add_patch(circleA)
-        my_axes[i].add_patch(circleB)
+        my_axes[i].plot(ptsA[:,0],ptsA[:,1],linewidth = 2,c = 'y')
+        my_axes[i].plot(ptsB[:,0],ptsB[:,1],linewidth = 2,c = 'r')
+    
+        # circleA = plt.Circle((-1, 0), 0.3, color='pink')
+        # circleB = plt.Circle((1, 0), 0.3, color='green')
+        # my_axes[i].add_patch(circleA)
+        # my_axes[i].add_patch(circleB)
 
     assert len(my_axes) == len(init_points)
 
