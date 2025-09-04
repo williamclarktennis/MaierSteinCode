@@ -7,8 +7,19 @@ The Maier-Stein stochastic system is a benchmark 2D system for studying the comm
 
 #### Quick start instructions (how to install/run)
 
+Installation (cloning the repo locally and setting up the virtual environment):
+```bash
+1. git clone https://github.com/williamclarktennis/MaierSteinCode.git
+2. cd MaierSteinCode
+3. python -m venv venv
+4. source venv/bin/activate   # Mac/Linux
+4b. venv\Scripts\activate      # Windows
+5. pip install -r requirements.txt
+```
 
 Screenshots or demo gif if relevant.
 
-“Future improvements” section (shows self-awareness).
+#### Future improvements
+
+
 
