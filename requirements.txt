@@ -1,6 +1,5 @@
-matplotlib
-numpy
-pandas
-scipy
-torch
-tqdm
+matplotlib==3.9.4
+numpy==2.0.2
+pandas==2.3.2
+scipy==1.13.1
+torch==2.2.2
